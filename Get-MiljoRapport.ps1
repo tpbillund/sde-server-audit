@@ -1,21 +1,21 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Miljørapport-script til elev-servere (AD, DHCP, DNS, GPO, Shares m.m.)
+    Miljoerapport-script til elev-servere (AD, DHCP, DNS, GPO, Shares m.m.)
 .DESCRIPTION
-    Kørsel: iwr -useb https://raw.githubusercontent.com/tpbillund/sde-server-audit/main/Get-MiljoRapport.ps1 | iex
+    Koersel: iwr -useb https://raw.githubusercontent.com/tpbillund/sde-server-audit/main/Get-MiljoRapport.ps1 | iex
     Eller lokalt: .\Get-MiljoRapport.ps1
 #>
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# OUTPUT-SYSTEM – skærm MED farver, fil med REN tekst
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
+# OUTPUT-SYSTEM - skaerm MED farver, fil med REN tekst
+# ===============================================================================
 
 # Global buffer til ren tekst (bruges til .txt filen)
 $script:RapportBuffer = [System.Collections.Generic.List[string]]::new()
 
 function Out-Linje {
-    # Skriver til BÅDE skærm (med farve) og buffer (uden farve)
+    # Skriver til BAaDE skaerm (med farve) og buffer (uden farve)
     param(
         [string]$Tekst,
         [string]$Farve = "White",
@@ -41,7 +41,7 @@ function Write-SubHeader {
     param([string]$Titel)
     Out-Linje "" -IngenBuffer
     $script:RapportBuffer.Add("")
-    Out-Linje "  ── $Titel ──" "Yellow"
+    Out-Linje "  -- $Titel --" "Yellow"
 }
 
 function Write-Ok {
@@ -71,11 +71,11 @@ function Write-Item {
 }
 
 function Write-Seperator {
-    Out-Linje "  $("─" * 56)" "DarkGray"
+    Out-Linje "  $("-" * 56)" "DarkGray"
 }
 
 function Write-LogonStatus {
-    # Sidst logon – grøn/gul på skærm, neutral i fil
+    # Sidst logon - groen/gul paa skaerm, neutral i fil
     param([string]$Tekst, [bool]$AldrigLoggetPaa)
     $farve = if ($AldrigLoggetPaa) { "Yellow" } else { "Green" }
     Write-Host "         Sidst logon : $Tekst" -ForegroundColor $farve
@@ -83,29 +83,29 @@ function Write-LogonStatus {
 }
 
 function Write-TjenesteStatus {
-    # Tjenestestatus – grøn/rød på skærm, med tekst-markering i fil
-    param([string]$Navn, [string]$Status, [bool]$Kører)
-    $farve  = if ($Kører) { "Green" } else { "Red" }
-    $marker = if ($Kører) { "[OK]" } else { "[!] " }
+    # Tjenestestatus - groen/roed paa skaerm, med tekst-markering i fil
+    param([string]$Navn, [string]$Status, [bool]$Koerer)
+    $farve  = if ($Koerer) { "Green" } else { "Red" }
+    $marker = if ($Koerer) { "[OK]" } else { "[!] " }
     Write-Host "        $($Navn.PadRight(30)) $Status" -ForegroundColor $farve
     $script:RapportBuffer.Add("        $($Navn.PadRight(30)) $marker $Status")
 }
 
-# ─── Kontroller moduler ────────────────────────────────────────────────────────
+# --- Kontroller moduler --------------------------------------------------------
 
 function Test-Modul {
     param([string]$Navn)
     if (-not (Get-Module -ListAvailable -Name $Navn)) {
-        Write-Springer "Modul '$Navn' ikke tilgængeligt – springer over."
+        Write-Springer "Modul '$Navn' ikke tilgaengeligt - springer over."
         return $false
     }
     Import-Module $Navn -ErrorAction SilentlyContinue
     return $true
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # SEKTIONER
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 function Get-SystemInfo {
     Write-Header "SYSTEMINFO"
@@ -116,7 +116,7 @@ function Get-SystemInfo {
     $disk = Get-PSDrive C | Select-Object Used, Free
 
     Write-Item "Computernavn"   $cs.Name
-    Write-Item "Domæne"         $cs.Domain
+    Write-Item "Domaene"         $cs.Domain
     Write-Item "OS"             $os.Caption
     Write-Item "OS Build"       $os.BuildNumber
     Write-Item "RAM (GB)"       ([math]::Round($cs.TotalPhysicalMemory / 1GB, 1))
@@ -125,7 +125,7 @@ function Get-SystemInfo {
 
     foreach ($n in $net) {
         Write-Seperator
-        Write-Item "Netværksadapter"  $n.Description
+        Write-Item "Netvaerksadapter"  $n.Description
         Write-Item "IPv4 Adresse"     ($n.IPAddress -join ", ")
         Write-Item "Subnet Mask"      ($n.IPSubnet -join ", ")
         Write-Item "Gateway"          ($n.DefaultIPGateway -join ", ")
@@ -141,16 +141,16 @@ function Get-ADRapport {
     try {
         $domain = Get-ADDomain -ErrorAction SilentlyContinue
         if ($domain) {
-            Write-Item "Domæne FQDN"   $domain.DNSRoot
+            Write-Item "Domaene FQDN"   $domain.DNSRoot
             Write-Item "NetBIOS Navn"  $domain.NetBIOSName
             Write-Item "Forest"        $domain.Forest
             Write-Item "PDC Emulator"  $domain.PDCEmulator
         }
     } catch {
-        Write-Springer "Kunne ikke hente domæneinfo."
+        Write-Springer "Kunne ikke hente domaeneinfo."
     }
 
-    # ── OU'er ──────────────────────────────────────────────────────────────────
+    # -- OU'er ------------------------------------------------------------------
     Write-SubHeader "Organisationsenheder (OU)"
     try {
         $OUs = @(Get-ADOrganizationalUnit -Filter * -Properties DistinguishedName `
@@ -170,10 +170,10 @@ function Get-ADRapport {
             }
         }
     } catch {
-        Write-Springer "Ingen OU'er fundet eller AD ikke tilgængeligt."
+        Write-Springer "Ingen OU'er fundet eller AD ikke tilgaengeligt."
     }
 
-    # ── Brugere ────────────────────────────────────────────────────────────────
+    # -- Brugere ----------------------------------------------------------------
     Write-SubHeader "AD Brugere"
     try {
         $brugere = @(Get-ADUser -Filter * -Properties DisplayName, EmailAddress,
@@ -197,7 +197,7 @@ function Get-ADRapport {
                 if ($b.EmailAddress) { Write-Info "         Email       : $($b.EmailAddress)" }
                 if ($b.Created)      { Write-Info "         Oprettet    : $($b.Created.ToString('dd-MM-yyyy HH:mm'))" }
 
-                # Sidst logget på
+                # Sidst logget paa
                 if ($b.LastLogonDate) {
                     $dagesiden  = (New-TimeSpan -Start $b.LastLogonDate -End (Get-Date)).Days
                     $logonTekst = "$($b.LastLogonDate.ToString('dd-MM-yyyy HH:mm'))  ($dagesiden dag(e) siden)"
@@ -220,10 +220,10 @@ function Get-ADRapport {
             }
         }
     } catch {
-        Write-Springer "Ingen brugere fundet eller AD ikke tilgængeligt."
+        Write-Springer "Ingen brugere fundet eller AD ikke tilgaengeligt."
     }
 
-    # ── Grupper ────────────────────────────────────────────────────────────────
+    # -- Grupper ----------------------------------------------------------------
     Write-SubHeader "AD Grupper (oprettede)"
     try {
         $grupper = @(Get-ADGroup -Filter * -Properties Members, Description `
@@ -240,7 +240,7 @@ function Get-ADRapport {
             Write-Seperator
             foreach ($g in $grupper) {
                 $antal = ($g.Members | Measure-Object).Count
-                Out-Linje "        $($g.Name)  [$($g.GroupCategory) / $($g.GroupScope)]  – $antal medlem(mer)" "White"
+                Out-Linje "        $($g.Name)  [$($g.GroupCategory) / $($g.GroupScope)]  - $antal medlem(mer)" "White"
                 if ($g.Description) { Write-Info "         Beskrivelse: $($g.Description)" }
                 if ($g.Members.Count -gt 0) {
                     $navne = $g.Members | ForEach-Object { ($_ -split ",")[0] -replace "CN=", "" }
@@ -249,14 +249,14 @@ function Get-ADRapport {
             }
         }
     } catch {
-        Write-Springer "Ingen grupper fundet eller AD ikke tilgængeligt."
+        Write-Springer "Ingen grupper fundet eller AD ikke tilgaengeligt."
     }
 
-    # ── GPO'er ─────────────────────────────────────────────────────────────────
+    # -- GPO'er -----------------------------------------------------------------
     Write-SubHeader "Group Policy Objects (GPO)"
     try {
         if (-not (Get-Module -ListAvailable -Name GroupPolicy)) {
-            Write-Springer "GroupPolicy-modul ikke installeret – GPO'er springes over."
+            Write-Springer "GroupPolicy-modul ikke installeret - GPO'er springes over."
             return
         }
         Import-Module GroupPolicy -ErrorAction SilentlyContinue
@@ -341,7 +341,7 @@ function Get-DHCPRapport {
                     Write-Info "  Ingen reservationer oprettet"
                 } else {
                     foreach ($r in $res) {
-                        Write-Info "  $($r.IPAddress.ToString().PadRight(18)) MAC: $($r.ClientId.PadRight(20)) – $($r.Name)"
+                        Write-Info "  $($r.IPAddress.ToString().PadRight(18)) MAC: $($r.ClientId.PadRight(20)) - $($r.Name)"
                     }
                 }
             } catch { Write-Info "  Ingen reservationer" }
@@ -418,7 +418,7 @@ function Get-DNSRapport {
                                 "MX"    { $post.RecordData.MailExchange }
                                 "PTR"   { $post.RecordData.PtrDomainName }
                                 "NS"    { $post.RecordData.NameServer }
-                                default { "–" }
+                                default { "-" }
                             }
                             Write-Info "    $($post.HostName.PadRight(30)) ->  $data"
                         }
@@ -525,7 +525,7 @@ function Get-LokaleKonti {
             $members = try {
                 (Get-LocalGroupMember $lg.Name -ErrorAction SilentlyContinue |
                  Select-Object -ExpandProperty Name) -join ", "
-            } catch { "–" }
+            } catch { "-" }
             Write-Info "$($lg.Name.PadRight(30)) <- $members"
         }
     } catch {
@@ -556,7 +556,7 @@ function Get-TjenesterRapport {
                 $koerer = ($svc.Status -eq "Running")
                 Write-TjenesteStatus -Navn $t.Vis -Status $svc.Status.ToString() -Korer $koerer
             } else {
-                # Ikke installeret – neutral grå på skærm, tydelig i fil
+                # Ikke installeret - neutral graa paa skaerm, tydelig i fil
                 Write-Host "        $($t.Vis.PadRight(30)) Ikke installeret" -ForegroundColor DarkGray
                 $script:RapportBuffer.Add("        $($t.Vis.PadRight(30)) [-]  Ikke installeret")
             }
@@ -577,7 +577,7 @@ function Get-FirewallRapport {
             $script:RapportBuffer.Add("        $($p.Name.PadRight(15)) $marker $status")
         }
 
-        Write-SubHeader "Brugerdefinerede indgående regler"
+        Write-SubHeader "Brugerdefinerede indgaaende regler"
         $regler = @(Get-NetFirewallRule -ErrorAction SilentlyContinue |
                     Where-Object {
                         $_.Direction -eq "Inbound" -and
@@ -586,7 +586,7 @@ function Get-FirewallRapport {
                     } | Sort-Object DisplayName)
 
         if ($regler.Count -eq 0) {
-            Write-Springer "Ingen brugerdefinerede indgående regler fundet"
+            Write-Springer "Ingen brugerdefinerede indgaaende regler fundet"
         } else {
             foreach ($r in $regler) { Write-Info $r.DisplayName }
         }
@@ -630,7 +630,7 @@ function Get-NetvaerksPing {
     }
 }
 
-# ─── Filnavn efter domæne FQDN ────────────────────────────────────────────────
+# --- Filnavn efter domaene FQDN ------------------------------------------------
 
 function Get-DomainFQDN {
     try {
@@ -660,9 +660,9 @@ function Gem-Rapport {
     }
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # HOVED
-# ═══════════════════════════════════════════════════════════════════════════════
+# ===============================================================================
 
 Clear-Host
 
@@ -670,7 +670,7 @@ $velkomstLinjer = @(
     "",
     "  ##################################################",
     "  #                                                #",
-    "  #       MILJO-RAPPORT  –  ELEV SERVER            #",
+    "  #       MILJO-RAPPORT  -  ELEV SERVER            #",
     "  #     Syddansk Erhvervsskole Vejle               #",
     "  #              IT & Data                         #",
     "  #                                                #",
@@ -692,7 +692,7 @@ if ($useScope) {
     $useMask = Read-Host "  Angiv Subnet Mask (fx 255.255.255.0)"
 }
 
-# Kør alle sektioner
+# Koer alle sektioner
 Get-SystemInfo
 Get-ADRapport
 Get-DHCPRapport
