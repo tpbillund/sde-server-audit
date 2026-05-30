@@ -1,0 +1,14 @@
+# Windows thumbnails
+Thumbs.db
+Desktop.ini
+
+# macOS metadata
+.DS_Store
+
+# Editor-filer
+.vscode/
+*.code-workspace
+.idea/
+
+# Temporære PowerShell-filer
+*.ps1xml
