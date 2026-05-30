@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+﻿﻿﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Miljørapport-script til elev-servere (AD, DHCP, DNS, GPO, Shares m.m.)
@@ -84,9 +84,9 @@ function Write-LogonStatus {
 
 function Write-TjenesteStatus {
     # Tjenestestatus - grøn/rød på skærm, med tekst-markering i fil
-    param([string]$Navn, [string]$Status, [bool]$Kører)
-    $farve  = if ($Kører) { "Green" } else { "Red" }
-    $marker = if ($Kører) { "[OK]" } else { "[!] " }
+    param([string]$Navn, [string]$Status, [bool]$Korer)
+    $farve  = if ($Korer) { "Green" } else { "Red" }
+    $marker = if ($Korer) { "[OK]" } else { "[!] " }
     Write-Host "        $($Navn.PadRight(30)) $Status" -ForegroundColor $farve
     $script:RapportBuffer.Add("        $($Navn.PadRight(30)) $marker $Status")
 }
@@ -554,7 +554,8 @@ function Get-TjenesterRapport {
             $svc = Get-Service -Name $t.Navn -ErrorAction SilentlyContinue
             if ($svc) {
                 $kører = ($svc.Status -eq "Running")
-                Write-TjenesteStatus -Navn $t.Vis -Status $svc.Status.ToString() -Korer $kører
+                $koerer = ($svc.Status -eq "Running")
+                Write-TjenesteStatus -Navn $t.Vis -Status $svc.Status.ToString() -Korer $koerer
             } else {
                 # Ikke installeret - neutral grå på skærm, tydelig i fil
                 Write-Host "        $($t.Vis.PadRight(30)) Ikke installeret" -ForegroundColor DarkGray
@@ -595,38 +596,96 @@ function Get-FirewallRapport {
     }
 }
 
-function Get-NetværksPing {
+function Get-NetvaerksPing {
     param([string]$Scope, [string]$SubnetMask)
     if (-not $Scope) { return }
 
-    Write-Header "NETVÆRKSSCANNING (PING)"
+    Write-Header "NETVAERKSSCANNING (PING)"
 
     try {
+        # Beregn netværksadresse og antal hosts korrekt ud fra subnet
         $scopeParts = $Scope -split "\."
         $maskParts  = $SubnetMask -split "\."
-        $netParts   = for ($i = 0; $i -lt 4; $i++) {
-            [int]$scopeParts[$i] -band [int]$maskParts[$i]
+
+        # Beregn netværksadresse ved at AND scope med maske
+        $netParts = @()
+        for ($i = 0; $i -lt 4; $i++) {
+            $netParts += ([int]$scopeParts[$i] -band [int]$maskParts[$i])
         }
 
-        Write-Info "Scanner netværk: $($netParts -join '.') / $SubnetMask"
-        Write-Info "Dette kan tage op til et minut..."
+        # Beregn broadcast ved at OR netværk med inverteret maske
+        $broadcastParts = @()
+        for ($i = 0; $i -lt 4; $i++) {
+            $broadcastParts += ($netParts[$i] -bor (255 -bxor [int]$maskParts[$i]))
+        }
+
+        # Konverter til 32-bit integers for at iterere alle host-adresser
+        $netInt  = ([int]$netParts[0] -shl 24) + ([int]$netParts[1] -shl 16) + ([int]$netParts[2] -shl 8) + [int]$netParts[3]
+        $brcInt  = ([int]$broadcastParts[0] -shl 24) + ([int]$broadcastParts[1] -shl 16) + ([int]$broadcastParts[2] -shl 8) + [int]$broadcastParts[3]
+        $antalHosts = $brcInt - $netInt - 1
+
+        Write-Info "Netvaerksadresse : $($netParts -join '.')"
+        Write-Info "Broadcast        : $($broadcastParts -join '.')"
+        Write-Info "Subnet Mask      : $SubnetMask"
+        Write-Info "Mulige hosts     : $antalHosts"
+        Write-Info "Scanner alle adresser - vent venligst..."
         Write-Seperator
 
         $hostsOnline = @()
-        1..254 | ForEach-Object {
-            $ip = "$($netParts[0]).$($netParts[1]).$($netParts[2]).$_"
+
+        # Iterer alle host-adresser mellem netværk og broadcast
+        for ($int = $netInt + 1; $int -lt $brcInt; $int++) {
+            $ip = "$( ($int -shr 24) -band 255).$( ($int -shr 16) -band 255).$( ($int -shr 8) -band 255).$( $int -band 255)"
+
             if (Test-Connection -ComputerName $ip -Count 1 -Quiet -TimeoutSeconds 1) {
+
+                # Forsøg DNS-opslag
                 $hostnavn = try { [System.Net.Dns]::GetHostEntry($ip).HostName } catch { "-" }
-                $hostsOnline += [PSCustomObject]@{ IP = $ip; Navn = $hostnavn }
+
+                # Forsøg at hente OS-info via WMI (virker kun på Windows-maskiner i samme domæne)
+                $os      = "-"
+                $type    = "Ukendt"
+                try {
+                    $wmi = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $ip `
+                           -ErrorAction SilentlyContinue -OperationTimeoutSec 2
+                    if ($wmi) {
+                        $os   = $wmi.Caption
+                        $type = "Windows"
+                    }
+                } catch { }
+
+                # Hvis WMI fejlede - gæt på Linux via hostname-format
+                if ($type -eq "Ukendt" -and $hostnavn -ne "-") {
+                    if ($hostnavn -notmatch "\.local$|\.2tall4u\.|WIN|SRV|PC") {
+                        $type = "Muligvis Linux"
+                    }
+                }
+
+                $hostsOnline += [PSCustomObject]@{
+                    IP       = $ip
+                    Hostnavn = $hostnavn
+                    OS       = $os
+                    Type     = $type
+                }
             }
         }
 
         Write-Ok "Online hosts: $($hostsOnline.Count)"
-        foreach ($h in $hostsOnline | Sort-Object { [System.Version]$_.IP }) {
-            Write-Info "$($h.IP.PadRight(18)) $($h.Navn)"
+        Write-Seperator
+        foreach ($h in $hostsOnline | Sort-Object IP) {
+            $farve = switch -Wildcard ($h.Type) {
+                "Windows"        { "Cyan"    }
+                "Muligvis Linux" { "Yellow"  }
+                default          { "Gray"    }
+            }
+            Write-Host "        $($h.IP.PadRight(20)) $($h.Type.PadRight(18)) $($h.Hostnavn)" -ForegroundColor $farve
+            $script:RapportBuffer.Add("        $($h.IP.PadRight(20)) $($h.Type.PadRight(18)) $($h.Hostnavn)")
+            if ($h.OS -ne "-") {
+                Write-Info "                          OS: $($h.OS)"
+            }
         }
     } catch {
-        Write-Springer "Fejl under netværksscanning."
+        Write-Springer "Fejl under netvaerksscanning: $_"
     }
 }
 
@@ -704,7 +763,7 @@ Get-LokaleKonti
 Get-TjenesterRapport
 Get-FirewallRapport
 if ($useScope) {
-    Get-NetværksPing -Scope $useScope -SubnetMask $useMask
+    Get-NetvaerksPing -Scope $useScope -SubnetMask $useMask
 }
 
 $slutLinjer = @(
