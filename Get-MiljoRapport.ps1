@@ -650,7 +650,9 @@ function Gem-Rapport {
     $sti     = "$env:USERPROFILE\Desktop\$filnavn"
 
     try {
-        $script:RapportBuffer | Out-File -FilePath $sti -Encoding utf8BOM
+        # UTF-8 med BOM - kompatibelt med PowerShell 5.1 og nyere
+        $utf8Bom = New-Object System.Text.UTF8Encoding $true
+        [System.IO.File]::WriteAllLines($sti, $script:RapportBuffer, $utf8Bom)
         Write-Host ""
         Write-Host "  Rapport gemt: $sti" -ForegroundColor Green
         $script:RapportBuffer.Add("")
